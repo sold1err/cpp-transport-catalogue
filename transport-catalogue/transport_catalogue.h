@@ -31,14 +31,14 @@ struct BusInfo {
 
 class TransportCatalogue {
 public:
-    void AddStop(std::string name, geo::Coordinates coordinates);
-    void AddBus(std::string name, const std::vector<std::string_view>& stop_names);
+    void AddStop(const std::string& name, geo::Coordinates coordinates);
+    void AddBus(const std::string& name, const std::vector<std::string_view>& stop_names);
 
     const Stop* FindStop(std::string_view name) const;
     const Bus* FindBus(std::string_view name) const;
 
     std::optional<BusInfo> GetBusInfo(std::string_view bus_name) const;
-    const std::set<std::string_view>* GetBusesByStop(std::string_view stop_name) const;
+    const std::set<std::string_view>& GetBusesByStop(std::string_view stop_name) const;
 
 private:
     struct StringViewHasher {

@@ -4,13 +4,13 @@ using namespace std;
 
 namespace transport_catalogue {
 
-void TransportCatalogue::AddStop(string name, geo::Coordinates coordinates) {
+void TransportCatalogue::AddStop(const string& name, geo::Coordinates coordinates) {
     stops_.push_back({move(name), coordinates});
     const Stop* stop_ptr = &stops_.back();
     stops_by_name_[stop_ptr->name] = stop_ptr;
 }
 
-void TransportCatalogue::AddBus(string name, const vector<string_view>& stop_names) {
+void TransportCatalogue::AddBus(const string& name, const vector<string_view>& stop_names) {
     buses_.push_back(Bus{});
     Bus& bus = buses_.back();
     bus.name = move(name);
@@ -68,17 +68,14 @@ optional<BusInfo> TransportCatalogue::GetBusInfo(string_view bus_name) const {
     return info;
 }
 
-const set<string_view>* TransportCatalogue::GetBusesByStop(string_view stop_name) const {
-    if (!FindStop(stop_name)) {
-        return nullptr;
-    }
+const set<string_view>& TransportCatalogue::GetBusesByStop(string_view stop_name) const {
+    static const std::set<std::string_view> empty_buses;
 
     if (auto it = stop_to_buses_.find(stop_name); it != stop_to_buses_.end()) {
-        return &it->second;
+        return it->second;
     }
 
-    static const set<string_view> empty_buses;
-    return &empty_buses;
+    return empty_buses;
 }
 
 }
