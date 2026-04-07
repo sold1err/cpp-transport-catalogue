@@ -1,89 +1,134 @@
 #include "input_reader.h"
 
-#include <algorithm>
-#include <cassert>
-#include <iterator>
+#include <string>
 
 using namespace std;
 
 namespace input_reader {
 
-geo::Coordinates ParseCoordinates(string_view str) {
-    static const double nan = std::nan("");
+namespace {
 
-    auto not_space = str.find_first_not_of(' ');
-    auto comma = str.find(',');
+struct StopDistanceDescription {
+    string_view stop_name;
+    int distance = 0;
+};
 
-    if (comma == str.npos) {
-        return {nan, nan};
-    }
-
-    auto not_space2 = str.find_first_not_of(' ', comma + 1);
-
-    double lat = stod(string(str.substr(not_space, comma - not_space)));
-    double lng = stod(string(str.substr(not_space2)));
-
-    return {lat, lng};
-}
-
-string_view Trim(string_view string) {
-    const auto start = string.find_first_not_of(' ');
-    if (start == string.npos) {
+string_view Trim(string_view str) {
+    const size_t start = str.find_first_not_of(' ');
+    if (start == str.npos) {
         return {};
     }
-    return string.substr(start, string.find_last_not_of(' ') + 1 - start);
+    const size_t end = str.find_last_not_of(' ');
+    return str.substr(start, end - start + 1);
 }
 
-vector<string_view> Split(string_view string, char delim) {
+vector<string_view> Split(string_view str, string_view delim) {
     vector<string_view> result;
 
-    size_t pos = 0;
-    while ((pos = string.find_first_not_of(' ', pos)) < string.length()) {
-        auto delim_pos = string.find(delim, pos);
-        if (delim_pos == string.npos) {
-            delim_pos = string.size();
+    while (true) {
+        size_t pos = str.find(delim);
+        if (pos == str.npos) {
+            str = Trim(str);
+            if (!str.empty()) {
+                result.push_back(str);
+            }
+            break;
         }
-        if (auto substr = Trim(string.substr(pos, delim_pos - pos)); !substr.empty()) {
-            result.push_back(substr);
+
+        string_view part = Trim(str.substr(0, pos));
+        if (!part.empty()) {
+            result.push_back(part);
         }
-        pos = delim_pos + 1;
+
+        str.remove_prefix(pos + delim.size());
     }
 
     return result;
 }
 
+geo::Coordinates ParseCoordinates(string_view str) {
+    str = Trim(str);
+
+    const size_t first_comma = str.find(',');
+    const size_t second_comma = str.find(',', first_comma + 1);
+
+    const string_view lat_sv = Trim(str.substr(0, first_comma));
+    const string_view lng_sv = Trim(
+        second_comma == str.npos
+            ? str.substr(first_comma + 1)
+            : str.substr(first_comma + 1, second_comma - first_comma - 1)
+        );
+
+    return {
+        stod(string(lat_sv)),
+        stod(string(lng_sv))
+    };
+}
+
 vector<string_view> ParseRoute(string_view route) {
-    if (route.find('>') != route.npos) {
-        return Split(route, '>');
+    if (route.find(" > ") != route.npos) {
+        return Split(route, " > ");
     }
 
-    auto stops = Split(route, '-');
-    vector<string_view> results(stops.begin(), stops.end());
-    results.insert(results.end(), next(stops.rbegin()), stops.rend());
+    vector<string_view> stops = Split(route, " - ");
+    vector<string_view> result = stops;
 
-    return results;
+    for (int i = static_cast<int>(stops.size()) - 2; i >= 0; --i) {
+        result.push_back(stops[i]);
+    }
+
+    return result;
+}
+
+vector<StopDistanceDescription> ParseStopDistances(string_view description) {
+    vector<StopDistanceDescription> result;
+
+    description = Trim(description);
+
+    const size_t first_comma = description.find(',');
+    if (first_comma == description.npos) {
+        return result;
+    }
+
+    const size_t second_comma = description.find(',', first_comma + 1);
+    if (second_comma == description.npos) {
+        return result;
+    }
+
+    string_view tail = description.substr(second_comma + 1);
+
+    for (string_view item : Split(tail, ",")) {
+        item = Trim(item);
+
+        const size_t m_pos = item.find("m to ");
+        const int distance = stoi(string(Trim(item.substr(0, m_pos))));
+        const string_view stop_name = Trim(item.substr(m_pos + 5));
+
+        result.push_back({stop_name, distance});
+    }
+
+    return result;
 }
 
 CommandDescription ParseCommandDescription(string_view line) {
-    auto colon_pos = line.find(':');
+    const size_t colon_pos = line.find(':');
     if (colon_pos == line.npos) {
         return {};
     }
 
-    auto space_pos = line.find(' ');
-    if (space_pos >= colon_pos) {
+    const size_t space_pos = line.find(' ');
+    if (space_pos == line.npos || space_pos >= colon_pos) {
         return {};
     }
 
-    auto not_space = line.find_first_not_of(' ', space_pos);
-    if (not_space >= colon_pos) {
-        return {};
-    }
+    const string_view command = line.substr(0, space_pos);
+    const string_view id = Trim(line.substr(space_pos + 1, colon_pos - space_pos - 1));
+    const string_view description = line.substr(colon_pos + 1);
 
-    return {string(line.substr(0, space_pos)),
-            string(line.substr(not_space, colon_pos - not_space)),
-            string(line.substr(colon_pos + 1))};
+    return {string(command), string(id), string(description)};
 }
+
+}  // namespace
 
 void InputReader::ParseLine(string_view line) {
     auto command_description = ParseCommandDescription(line);
@@ -100,10 +145,20 @@ void InputReader::ApplyCommands(transport_catalogue::TransportCatalogue& catalog
     }
 
     for (const auto& command : commands_) {
+        if (command.command == "Stop") {
+            const auto* from = catalogue.FindStop(command.id);
+            for (const auto& [stop_name, distance] : ParseStopDistances(command.description)) {
+                const auto* to = catalogue.FindStop(stop_name);
+                catalogue.SetDistanceBetweenStops(from, to, distance);
+            }
+        }
+    }
+
+    for (const auto& command : commands_) {
         if (command.command == "Bus") {
             catalogue.AddBus(command.id, ParseRoute(command.description));
         }
     }
 }
 
-}
+}  // namespace input_reader

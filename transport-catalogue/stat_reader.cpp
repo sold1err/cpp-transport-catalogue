@@ -17,7 +17,8 @@ void PrintBusInfo(const transport_catalogue::TransportCatalogue& transport_catal
         output << "Bus " << bus_name << ": "
                << info->stops_count << " stops on route, "
                << info->unique_stops_count << " unique stops, "
-               << info->route_length << " route length" << endl;
+               << info->route_length << " route length"
+               << info->curvature << " curvature" << endl;
     }
 }
 

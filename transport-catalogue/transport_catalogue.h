@@ -27,12 +27,16 @@ struct BusInfo {
     int stops_count = 0;
     int unique_stops_count = 0;
     double route_length = 0.0;
+    double curvature = 0.0;
 };
 
 class TransportCatalogue {
 public:
     void AddStop(const std::string& name, geo::Coordinates coordinates);
     void AddBus(const std::string& name, const std::vector<std::string_view>& stop_names);
+
+    void SetDistanceBetweenStops(const Stop* from, const Stop* to, int distance);
+    int GetDistanceBetweenStops(const Stop* from, const Stop* to) const;
 
     const Stop* FindStop(std::string_view name) const;
     const Bus* FindBus(std::string_view name) const;
@@ -47,12 +51,20 @@ private:
         }
     };
 
+    struct StopPairHasher {
+        size_t operator()(const std::pair<const Stop*, const Stop*>& stops) const {
+            return std::hash<const void*>{}(stops.first)
+            + 37u * std::hash<const void*>{}(stops.second);
+        }
+    };
+
     std::deque<Stop> stops_;
     std::deque<Bus> buses_;
 
     std::unordered_map<std::string_view, const Stop*, StringViewHasher> stops_by_name_;
     std::unordered_map<std::string_view, const Bus*, StringViewHasher> buses_by_name_;
     std::unordered_map<std::string_view, std::set<std::string_view>, StringViewHasher> stop_to_buses_;
+    std::unordered_map<std::pair<const Stop*, const Stop*>, int, StopPairHasher> distances_;
 };
 
 }

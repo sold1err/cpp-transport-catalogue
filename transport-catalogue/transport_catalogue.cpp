@@ -29,6 +29,20 @@ void TransportCatalogue::AddBus(const string& name, const vector<string_view>& s
     }
 }
 
+void TransportCatalogue::SetDistanceBetweenStops(const Stop* from, const Stop* to, int distance) {
+    distances_[{from, to}] = distance;
+}
+
+int TransportCatalogue::GetDistanceBetweenStops(const Stop* from, const Stop* to) const {
+    if (auto it = distances_.find({from, to}); it != distances_.end()) {
+        return it->second;
+    }
+    if (auto it = distances_.find({to, from}); it != distances_.end()) {
+        return it->second;
+    }
+    return 0;
+}
+
 const Stop* TransportCatalogue::FindStop(string_view name) const {
     if (auto it = stops_by_name_.find(name); it != stops_by_name_.end()) {
         return it->second;
@@ -53,17 +67,24 @@ optional<BusInfo> TransportCatalogue::GetBusInfo(string_view bus_name) const {
     info.stops_count = static_cast<int>(bus->stops.size());
 
     unordered_set<string_view, StringViewHasher> unique_stops;
+    double geo_length = 0.0;
+    int road_length = 0;
+
     for (const Stop* stop : bus->stops) {
         unique_stops.insert(stop->name);
     }
     info.unique_stops_count = static_cast<int>(unique_stops.size());
 
     for (size_t i = 1; i < bus->stops.size(); ++i) {
-        info.route_length += geo::ComputeDistance(
-            bus->stops[i - 1]->coordinates,
-            bus->stops[i]->coordinates
-            );
+        const Stop* from = bus->stops[i - 1];
+        const Stop* to = bus->stops[i];
+
+        geo_length += geo::ComputeDistance(from->coordinates, to->coordinates);
+        road_length += GetDistanceBetweenStops(from, to);
     }
+
+    info.route_length = road_length;
+    info.curvature = (geo_length == 0.0 ? 0.0 : road_length / geo_length);
 
     return info;
 }
