@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <set>
+#include <sstream>
+
+#include "map_renderer.h"
 
 namespace request_handler {
 
@@ -59,6 +62,14 @@ std::vector<const domain::Stop*> RequestHandler::GetSortedStopsForMap() const {
     }
 
     return {unique_stops.begin(), unique_stops.end()};
+}
+
+std::string RequestHandler::RenderMap(const map_renderer::MapRenderer& renderer) const {
+    svg::Document svg_doc = renderer.Render(*this);
+
+    std::ostringstream out;
+    svg_doc.Render(out);
+    return out.str();
 }
 
 }  // namespace request_handler

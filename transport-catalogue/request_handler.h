@@ -2,11 +2,16 @@
 
 #include <optional>
 #include <set>
+#include <string>
 #include <string_view>
 #include <vector>
 
 #include "domain.h"
 #include "transport_catalogue.h"
+
+namespace map_renderer {
+class MapRenderer;
+}
 
 namespace request_handler {
 
@@ -20,6 +25,8 @@ public:
     std::vector<const domain::Bus*> GetSortedBuses() const;
     std::vector<const domain::Stop*> GetRouteStops(const domain::Bus& bus) const;
     std::vector<const domain::Stop*> GetSortedStopsForMap() const;
+
+    std::string RenderMap(const map_renderer::MapRenderer& renderer) const;
 
 private:
     const transport_catalogue::TransportCatalogue& catalogue_;

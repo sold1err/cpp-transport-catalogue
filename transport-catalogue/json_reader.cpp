@@ -78,6 +78,40 @@ BusInput ParseBus(const json::Dict& dict) {
     return bus;
 }
 
+void AddStopsToCatalogue(transport_catalogue::TransportCatalogue& catalogue,
+                         const vector<StopInput>& stops) {
+    for (const auto& stop : stops) {
+        catalogue.AddStop(stop.name, {stop.latitude, stop.longitude});
+    }
+}
+
+void AddDistancesToCatalogue(transport_catalogue::TransportCatalogue& catalogue,
+                             const vector<StopInput>& stops) {
+    for (const auto& stop : stops) {
+        const domain::Stop* from = catalogue.FindStop(stop.name);
+        for (const auto& [to_name, distance] : stop.road_distances) {
+            const domain::Stop* to = catalogue.FindStop(to_name);
+            if (from != nullptr && to != nullptr) {
+                catalogue.SetDistanceBetweenStops(from, to, distance);
+            }
+        }
+    }
+}
+
+void AddBusesToCatalogue(transport_catalogue::TransportCatalogue& catalogue,
+                         const vector<BusInput>& buses) {
+    for (const auto& bus : buses) {
+        vector<string_view> stop_names;
+        stop_names.reserve(bus.stops.size());
+
+        for (const string& stop_name : bus.stops) {
+            stop_names.push_back(stop_name);
+        }
+
+        catalogue.AddBus(bus.name, stop_names, bus.is_roundtrip);
+    }
+}
+
 json::Node MakeErrorResponse(int request_id) {
     return json::Dict{
         {"request_id", request_id},
@@ -110,12 +144,8 @@ json::Node MakeBusResponse(int request_id, const domain::BusInfo& info) {
 json::Node MakeMapResponse(int request_id,
                            const request_handler::RequestHandler& handler,
                            const map_renderer::MapRenderer& renderer) {
-    svg::Document svg_doc = renderer.Render(handler);
-    ostringstream out;
-    svg_doc.Render(out);
-
     return json::Dict{
-        {"map", out.str()},
+        {"map", handler.RenderMap(renderer)},
         {"request_id", request_id}
     };
 }
@@ -144,30 +174,9 @@ void JsonReader::ProcessBaseRequests(const json::Document& doc) {
         }
     }
 
-    for (const auto& stop : stops) {
-        catalogue_.AddStop(stop.name, {stop.latitude, stop.longitude});
-    }
-
-    for (const auto& stop : stops) {
-        const domain::Stop* from = catalogue_.FindStop(stop.name);
-        for (const auto& [to_name, distance] : stop.road_distances) {
-            const domain::Stop* to = catalogue_.FindStop(to_name);
-            if (from != nullptr && to != nullptr) {
-                catalogue_.SetDistanceBetweenStops(from, to, distance);
-            }
-        }
-    }
-
-    for (const auto& bus : buses) {
-        vector<string_view> stop_names;
-        stop_names.reserve(bus.stops.size());
-
-        for (const string& stop_name : bus.stops) {
-            stop_names.push_back(stop_name);
-        }
-
-        catalogue_.AddBus(bus.name, stop_names, bus.is_roundtrip);
-    }
+    AddStopsToCatalogue(catalogue_, stops);
+    AddDistancesToCatalogue(catalogue_, stops);
+    AddBusesToCatalogue(catalogue_, buses);
 }
 
 map_renderer::RenderSettings JsonReader::ParseRenderSettings(const json::Document& doc) const {
