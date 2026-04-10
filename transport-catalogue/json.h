@@ -23,6 +23,10 @@ public:
     using Value = std::variant<std::nullptr_t, Array, Dict, bool, int, double, std::string>;
     using Value::Value;
 
+    Node(Value value)
+        : Value(std::move(value)) {
+    }
+
     bool IsInt() const {
         return std::holds_alternative<int>(*this);
     }
@@ -101,6 +105,10 @@ public:
             throw std::logic_error("Not a map"s);
         }
         return std::get<Dict>(*this);
+    }
+
+    Value& GetValue() {
+        return static_cast<Value&>(*this);
     }
 
     const Value& GetValue() const {

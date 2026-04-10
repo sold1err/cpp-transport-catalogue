@@ -1,9 +1,12 @@
 #include "json_reader.h"
 
+#include <set>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "json_builder.h"
 
 using namespace std;
 
@@ -113,10 +116,12 @@ void AddBusesToCatalogue(transport_catalogue::TransportCatalogue& catalogue,
 }
 
 json::Node MakeErrorResponse(int request_id) {
-    return json::Dict{
-        {"request_id", request_id},
-        {"error_message", string("not found")}
-    };
+    return json::Builder{}
+        .StartDict()
+            .Key("request_id").Value(request_id)
+            .Key("error_message").Value(string("not found"))
+        .EndDict()
+        .Build();
 }
 
 json::Node MakeStopResponse(int request_id, const set<string_view>& buses) {
@@ -125,29 +130,44 @@ json::Node MakeStopResponse(int request_id, const set<string_view>& buses) {
         buses_array.push_back(string(bus));
     }
 
-    return json::Dict{
-        {"buses", move(buses_array)},
-        {"request_id", request_id}
-    };
+    json::Dict result = json::Builder{}
+        .StartDict()
+            .Key("request_id").Value(request_id)
+            .Key("buses").Value(buses_array)
+        .EndDict()
+        .Build()
+        .AsMap();
+
+    return result;
 }
 
 json::Node MakeBusResponse(int request_id, const domain::BusInfo& info) {
-    return json::Dict{
-        {"curvature", info.curvature},
-        {"request_id", request_id},
-        {"route_length", info.route_length},
-        {"stop_count", info.stops_count},
-        {"unique_stop_count", info.unique_stops_count}
-    };
+    json::Dict result = json::Builder{}
+        .StartDict()
+            .Key("curvature").Value(info.curvature)
+            .Key("request_id").Value(request_id)
+            .Key("route_length").Value(info.route_length)
+            .Key("stop_count").Value(info.stops_count)
+            .Key("unique_stop_count").Value(info.unique_stops_count)
+        .EndDict()
+        .Build()
+        .AsMap();
+
+    return result;
 }
 
 json::Node MakeMapResponse(int request_id,
                            const request_handler::RequestHandler& handler,
                            const map_renderer::MapRenderer& renderer) {
-    return json::Dict{
-        {"map", handler.RenderMap(renderer)},
-        {"request_id", request_id}
-    };
+    json::Dict result = json::Builder{}
+        .StartDict()
+            .Key("map").Value(handler.RenderMap(renderer))
+            .Key("request_id").Value(request_id)
+        .EndDict()
+        .Build()
+        .AsMap();
+
+    return result;
 }
 
 }  // namespace
