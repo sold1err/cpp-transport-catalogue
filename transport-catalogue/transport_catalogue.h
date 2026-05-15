@@ -8,7 +8,6 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#include <map>
 
 #include "domain.h"
 
@@ -29,7 +28,7 @@ public:
     const std::set<std::string_view>& GetBusesByStop(std::string_view stop_name) const;
     
     const std::deque<domain::Bus>& GetAllBuses() const;
-    const std::map<std::string_view, const domain::Stop*>& GetSortedStops() const;
+    const std::deque<domain::Stop>& GetAllStops() const;
 
 private:
     struct StringViewHasher {
@@ -52,8 +51,6 @@ private:
     std::unordered_map<std::string_view, const domain::Bus*, StringViewHasher> buses_by_name_;
     std::unordered_map<std::string_view, std::set<std::string_view>, StringViewHasher> stop_to_buses_;
     std::unordered_map<std::pair<const domain::Stop*, const domain::Stop*>, int, StopPairHasher> distances_;
-    
-    std::map<std::string_view, const domain::Stop*> sorted_stops_;
 };
 
 }  // namespace transport_catalogue

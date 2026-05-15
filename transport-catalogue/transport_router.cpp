@@ -2,51 +2,28 @@
 
 namespace transport_router {
 
-TransportRouter::TransportRouter(const transport_catalogue::TransportCatalogue& catalogue, const domain::RoutingSettings& settings)
+TransportRouter::TransportRouter(
+    const transport_catalogue::TransportCatalogue& catalogue,
+    const domain::RoutingSettings& settings)
     : settings_(settings) {
-    const auto& stops = catalogue.GetSortedStops();
-    graph_ = std::make_unique<graph::DirectedWeightedGraph<double>>(stops.size() * 2);
-    
-    graph::VertexId v_id = 0;
-    for (const auto& [name, stop_ptr] : stops) {
-        stop_to_vertex_[name] = v_id;
-        vertex_to_stop_name_[v_id] = name;
-        graph_->AddEdge({v_id, v_id + 1, static_cast<double>(settings_.bus_wait_time)});
-        v_id += 2;
+
+    std::vector<const domain::Stop*> stops;
+
+    for (const auto& stop : catalogue.GetAllStops()) {
+        stops.push_back(&stop);
     }
 
-    const double velocity_m_min = settings_.bus_velocity * 1000.0 / 60.0;
+    std::sort(stops.begin(), stops.end(), [](const domain::Stop* lhs, const domain::Stop* rhs) {
+        return lhs->name < rhs->name;
+    });
 
-    for (const auto& bus : catalogue.GetAllBuses()) {
-        const auto& b_stops = bus.stops;
-        if (b_stops.empty()) continue;
+    graph_ = graph::DirectedWeightedGraph<double>(stops.size() * 2);
 
-        auto add_edges = [&](size_t start_idx, size_t end_idx, bool forward) {
-            for (size_t i = start_idx; i != end_idx; forward ? ++i : --i) {
-                int dist_sum = 0;
-                int span_count = 0;
-                for (size_t j = forward ? i + 1 : i - 1; j != (forward ? end_idx + 1 : end_idx - 1); forward ? ++j : --j) {
-                    dist_sum += catalogue.GetDistanceBetweenStops(b_stops[forward ? j - 1 : j + 1], b_stops[j]);
-                    ++span_count;
-                    
-                    graph::EdgeId id = graph_->AddEdge({
-                        stop_to_vertex_.at(b_stops[i]->name) + 1,
-                        stop_to_vertex_.at(b_stops[j]->name),
-                        static_cast<double>(dist_sum) / velocity_m_min
-                    });
-                    edge_id_to_info_[id] = {bus.name, span_count};
-                }
-            }
-        };
+    FillGraphWithStops(stops);
 
-        if (bus.is_roundtrip) {
-            add_edges(0, b_stops.size() - 1, true);
-        } else {
-            add_edges(0, b_stops.size() - 1, true);
-            add_edges(b_stops.size() - 1, 0, false);
-        }
-    }
-    router_ = std::make_unique<graph::Router<double>>(*graph_);
+    FillGraphWithBuses(catalogue);
+
+    router_ = std::make_unique<graph::Router<double>>(graph_);
 }
 
 std::optional<domain::RouteInfo> TransportRouter::FindRoute(std::string_view from, std::string_view to) const {
@@ -59,7 +36,7 @@ std::optional<domain::RouteInfo> TransportRouter::FindRoute(std::string_view fro
     domain::RouteInfo res;
     res.total_time = route->weight;
     for (auto e_id : route->edges) {
-        const auto& edge = graph_->GetEdge(e_id);
+        const auto& edge = graph_.GetEdge(e_id);
         if (edge_id_to_info_.count(e_id)) {
             const auto& info = edge_id_to_info_.at(e_id);
             res.items.push_back(domain::RouteItemBus{std::string(info.bus_name), info.span_count, edge.weight});
@@ -68,6 +45,97 @@ std::optional<domain::RouteInfo> TransportRouter::FindRoute(std::string_view fro
         }
     }
     return res;
+}
+
+void TransportRouter::FillGraphWithStops(
+    const std::vector<const domain::Stop*>& stops) {
+
+    graph::VertexId v_id = 0;
+
+    for (const domain::Stop* stop_ptr : stops) {
+        stop_to_vertex_[stop_ptr->name] = v_id;
+        vertex_to_stop_name_[v_id] = stop_ptr->name;
+
+        graph_.AddEdge({
+            v_id,
+            v_id + 1,
+            static_cast<double>(settings_.bus_wait_time)
+        });
+
+        v_id += 2;
+    }
+}
+
+void TransportRouter::FillGraphWithBuses(
+    const transport_catalogue::TransportCatalogue& catalogue) {
+
+    for (const auto& bus : catalogue.GetAllBuses()) {
+        if (bus.stops.empty()) {
+            continue;
+        }
+
+        AddBusEdges(
+            catalogue,
+            bus,
+            0,
+            bus.stops.size() - 1,
+            true
+            );
+
+        if (!bus.is_roundtrip) {
+            AddBusEdges(
+                catalogue,
+                bus,
+                bus.stops.size() - 1,
+                0,
+                false
+                );
+        }
+    }
+}
+
+void TransportRouter::AddBusEdges(
+    const transport_catalogue::TransportCatalogue& catalogue,
+    const domain::Bus& bus,
+    size_t start_idx,
+    size_t end_idx,
+    bool forward) {
+
+    const auto& stops = bus.stops;
+
+    const double velocity_m_min =
+        settings_.bus_velocity * 1000.0 / 60.0;
+
+    for (size_t i = start_idx;
+         i != end_idx;
+         forward ? ++i : --i) {
+
+        int dist_sum = 0;
+        int span_count = 0;
+
+        for (size_t j = forward ? i + 1 : i - 1;
+             j != (forward ? end_idx + 1 : end_idx - 1);
+             forward ? ++j : --j) {
+
+            dist_sum += catalogue.GetDistanceBetweenStops(
+                stops[forward ? j - 1 : j + 1],
+                stops[j]
+                );
+
+            ++span_count;
+
+            graph::EdgeId id = graph_.AddEdge({
+                stop_to_vertex_.at(stops[i]->name) + 1,
+                stop_to_vertex_.at(stops[j]->name),
+                static_cast<double>(dist_sum) / velocity_m_min
+            });
+
+            edge_id_to_info_[id] = {
+                bus.name,
+                span_count
+            };
+        }
+    }
 }
 
 } // namespace transport_router

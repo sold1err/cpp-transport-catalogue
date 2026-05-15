@@ -9,7 +9,6 @@ void TransportCatalogue::AddStop(string name, geo::Coordinates coordinates) {
     stops_.push_back({move(name), coordinates});
     const domain::Stop* stop_ptr = &stops_.back();
     stops_by_name_[stop_ptr->name] = stop_ptr;
-    sorted_stops_[stop_ptr->name] = stop_ptr;
 }
 
 void TransportCatalogue::AddBus(string name, const vector<string_view>& stop_names, bool is_roundtrip) {
@@ -108,8 +107,8 @@ const deque<domain::Bus>& TransportCatalogue::GetAllBuses() const {
     return buses_;
 }
 
-const map<string_view, const domain::Stop*>& TransportCatalogue::GetSortedStops() const {
-    return sorted_stops_;
+const deque<domain::Stop>& TransportCatalogue::GetAllStops() const {
+    return stops_;
 }
 
 }  // namespace transport_catalogue
